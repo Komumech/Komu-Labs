@@ -3,98 +3,147 @@
 <head>
   <meta charset="UTF-8" />
   <title>Chess vs Gemini</title>
- <!-- ✅ Working Chessboard.js UI -->
+
+  <!-- Chessboard.js UI -->
   <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/css/chessboard.css" />
   <script src="https://unpkg.com/chessboardjs@1.0.0/js/chessboard.js"></script>
-  <!-- ✅ Working Chess.js rules engine -->
+
+  <!-- Chess.js rules engine -->
   <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
+
   <style>
-    body { font-family: sans-serif; background: #111; color: #eee; text-align: center; padding: 20px; }
-    #board { width: 400px; margin: 20px auto; }
-    #log { width: 400px; height: 200px; overflow: auto; background: #222; padding: 10px; margin: 0 auto; border-radius: 6px; }
-    input, button { margin: 6px; padding: 8px; border-radius: 6px; border: none; }
-    input { width: 300px; }
-    button { background: #444; color: #fff; cursor: pointer; }
-    button:hover { background: #666; }
+    body {
+      font-family: sans-serif;
+      background: #111;
+      color: #eee;
+      text-align: center;
+      padding: 20px;
+    }
+    #board {
+      width: 400px;
+      margin: 20px auto;
+    }
+    #log {
+      width: 400px;
+      height: 200px;
+      overflow: auto;
+      background: #222;
+      padding: 10px;
+      margin: 0 auto;
+      border-radius: 6px;
+      text-align: left;
+      font-size: 14px;
+    }
+    input, button {
+      margin: 6px;
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+    }
+    input {
+      width: 300px;
+    }
+    button {
+      background: #444;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #666;
+    }
+    #api-info {
+      margin-top: 10px;
+      font-size: 0.8em;
+      color: #aaa;
+    }
   </style>
 </head>
+
 <body>
   <h2>Chess vs Gemini</h2>
   <div id="board"></div>
+
   <div>
     <button onclick="newGame()">New Game</button>
     <button onclick="flipBoard()">Flip</button>
     <button onclick="undoMove()">Undo</button>
   </div>
+
   <div>
-    <input id="apiKey" type="password" placeholder="Paste Gemini API key" />
     <input id="model" type="text" value="gemini-1.5-flash" />
   </div>
+
+  <div id="api-info">
+    *API key is now managed securely on the backend proxy server at <strong>http://localhost:3000</strong>
+  </div>
+
   <div id="log"></div>
 
-<script>
-const game = new Chess();
-let board = null;
-let humanColor = 'white';
-let historySAN = [];
+  <script>
+    const game = new Chess();
+    let board = null;
+    let humanColor = 'white';
+    let historySAN = [];
+    const PROXY_URL = 'http://localhost:3000/api/gemini-move';
 
-function log(msg) {
-  const logEl = document.getElementById('log');
-  logEl.innerHTML += msg + "<br>";
-  logEl.scrollTop = logEl.scrollHeight;
-}
+    function log(msg) {
+      const logEl = document.getElementById('log');
+      logEl.innerHTML += msg + "<br>";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
 
-function updateBoard() {
-  board.position(game.fen());
-}
+    function updateBoard() {
+      board.position(game.fen());
+    }
 
-function newGame() {
-  game.reset();
-  historySAN = [];
-  updateBoard();
-  log("New game started.");
-  if (humanColor === 'black') requestAIMove();
-}
+    function newGame() {
+      game.reset();
+      historySAN = [];
+      updateBoard();
+      log("New game started.");
+      if (humanColor === 'black') requestAIMove();
+    }
 
-function flipBoard() {
-  board.flip();
-  humanColor = humanColor === 'white' ? 'black' : 'white';
-  log("You are now playing as " + humanColor + ".");
-  newGame();
-}
+    function flipBoard() {
+      board.flip();
+      humanColor = humanColor === 'white' ? 'black' : 'white';
+      log("You are now playing as " + humanColor + ".");
+      newGame();
+    }
 
-function undoMove() {
-  const m1 = game.undo(); if (m1) historySAN.pop();
-  const m2 = game.undo(); if (m2) historySAN.pop();
-  updateBoard();
-  log("Undid last pair of moves.");
-}
+    function undoMove() {
+      const m1 = game.undo(); if (m1) historySAN.pop();
+      const m2 = game.undo(); if (m2) historySAN.pop();
+      updateBoard();
+      log("Undid last pair of moves.");
+    }
 
-function onDrop(source, target) {
-  const move = game.move({ from: source, to: target, promotion: 'q' });
-  if (!move) return 'snapback';
-  historySAN.push(move.san);
-  log("You: " + move.san);
-  updateBoard();
-  if (!game.isGameOver()) requestAIMove();
-}
+    function onDrop(source, target) {
+      const isHumanTurn = (game.turn() === 'w' && humanColor === 'white') || (game.turn() === 'b' && humanColor === 'black');
+      if (!isHumanTurn) return 'snapback';
 
-board = Chessboard('board', {
-  position: 'start',
-  draggable: true,
-  onDrop: onDrop
-});
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+      if (!move) return 'snapback';
 
-function requestAIMove() {
-  log("Gemini thinking...");
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const model = document.getElementById('model').value.trim();
-  if (!apiKey) {
-    log("Error: Paste your Gemini API key.");
-    return;
-  }
+      historySAN.push(move.san);
+      log("You: " + move.san);
+      updateBoard();
+      if (!game.isGameOver()) requestAIMove();
+    }
 
-  const prompt = `
+    board = Chessboard('board', {
+      position: 'start',
+      draggable: true,
+      onDrop: onDrop
+    });
+
+    board.orientation(humanColor);
+
+    function requestAIMove() {
+      log("Gemini thinking...");
+      const model = document.getElementById('model').value.trim();
+
+      const prompt = `
 You are a chess engine assistant. Respond ONLY with one JSON object:
 {"move":"e2e4","reason":"...","confidence":0.7}
 Rules:
@@ -102,41 +151,50 @@ Rules:
 - Use lowercase; include promotion like "a7a8q" if needed.
 Input:
 - FEN: ${game.fen()}
-- Side to move: ${game.turn()==='w'?'white':'black'}
+- Side to move: ${game.turn() === 'w' ? 'white' : 'black'}
 - History (SAN): ${historySAN.join(', ') || '(none)'}
 `;
 
-  fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 64 }
-    })
-  })
-  .then(res => res.json())
-  .then(data => {
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("No JSON in Gemini response");
-    const json = JSON.parse(match[0]);
-    const uci = json.move.toLowerCase();
-    const move = game.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] });
-    if (move) {
-      historySAN.push(move.san);
-      log("Gemini: " + move.san + " (" + json.reason + ")");
-      updateBoard();
-    } else {
-      log("Gemini gave illegal move: " + uci);
-    }
-  })
-  .catch(err => {
-    log("Error: " + err.message);
-    console.error(err);
-  });
-}
+      fetch(PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt, model: model })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error(`Proxy server error: HTTP status ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        if (data.error) throw new Error(`Proxy reported: ${data.error}`);
 
-updateBoard();
-</script>
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const match = text.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error("Gemini response was invalid (No JSON found)");
+
+        const json = JSON.parse(match[0]);
+        const uci = json.move.toLowerCase();
+        const move = game.move({
+          from: uci.slice(0, 2),
+          to: uci.slice(2, 4),
+          promotion: uci.slice(4, 5)
+        });
+
+        if (move) {
+          historySAN.push(move.san);
+          log("Gemini: " + move.san + (json.reason ? ` (${json.reason})` : ''));
+          updateBoard();
+          if (game.isGameOver()) log("--- GAME OVER ---");
+        } else {
+          log("Gemini gave illegal move: " + uci + " | FEN: " + game.fen());
+        }
+      })
+      .catch(err => {
+        log("Error contacting proxy/Gemini: " + err.message);
+        console.error(err);
+      });
+    }
+
+    updateBoard();
+  </script>
 </body>
 </html>
