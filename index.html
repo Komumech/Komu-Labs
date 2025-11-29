@@ -1,380 +1,382 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess vs Gemini</title>
-    <!-- Load Tailwind CSS for simple styling -->
+    <title>Gemini Chess</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- We keep chess.js for the game logic -->
-    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
-    
+    <!-- Load Chessboard.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <!-- Load Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Custom styles for aesthetics */
-        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; }
-        .board-container { 
-            width: 90vw; 
-            max-width: 400px; 
-            margin: 20px auto; 
-            border-radius: 8px; 
-            overflow: hidden; 
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        }
-
-        /* --- Custom Board Styles (Replaces chessboard.js CSS) --- */
-        #board {
-            display: grid;
-            grid-template-columns: repeat(8, 1fr);
-            grid-template-rows: repeat(8, 1fr);
-            aspect-ratio: 1 / 1; /* Keep it square */
-        }
-
-        .square {
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
             display: flex;
-            align-items: center;
             justify-content: center;
-            font-size: 2.5em; /* Size of the chess pieces (emojis) */
-            cursor: pointer;
-            position: relative;
-        }
-
-        .light-square { background-color: #f0d9b5; }
-        .dark-square { background-color: #b58863; }
-        .light-square .piece { color: #000; }
-        .dark-square .piece { color: #000; }
-        
-        .light-square.highlight, .dark-square.highlight {
-            box-shadow: inset 0 0 0 4px #10b981; /* Tailwind green-500 */
-        }
-        
-        .piece {
-            user-select: none;
-            cursor: grab;
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            display: flex;
             align-items: center;
-            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
         }
-
-        /* Adjust piece color for visibility */
-        .piece.w { color: #fff; text-shadow: 1px 1px 2px #000; }
-        .piece.b { color: #000; text-shadow: 1px 1px 2px #fff; }
-
-        /* --- End Custom Board Styles --- */
-        
-        #log { width: 90vw; max-width: 400px; height: 180px; overflow-y: auto; background: #1e293b; padding: 12px; margin: 15px auto; border-radius: 6px; text-align: left; font-size: 14px; border: 1px solid #334155; }
-        .log-message { margin-bottom: 4px; border-bottom: 1px dotted #334155; padding-bottom: 2px; }
+        .board-container {
+            width: 90vw;
+            max-width: 500px;
+        }
+        /* Custom styling for chessboard.js to ensure responsiveness and aesthetics */
+        .chessboardjs-container .square {
+            border-radius: 4px; /* Soft rounded corners for squares */
+        }
+        .chessboardjs-container {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            border-radius: 0.75rem; /* Large rounded corners for the whole board container */
+            overflow: hidden;
+            background-color: #4b5563; /* Dark background for the frame */
+        }
+        /* Style for the move message box */
+        #status-box {
+            min-height: 6rem;
+        }
     </style>
 </head>
-<body class="p-4 flex flex-col items-center justify-center min-h-screen">
-    <div class="w-full max-w-lg">
-        <h2 class="text-3xl font-bold mb-6 text-white">Chess vs Gemini</h2>
-        
-        <div id="board" class="board-container">
-            <!-- Squares will be generated here by JavaScript -->
+<body class="selection:bg-indigo-300 selection:text-gray-900">
+
+    <div class="w-full max-w-xl p-4 bg-white rounded-xl shadow-2xl">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">
+            Play Chess with Gemini
+        </h1>
+
+        <!-- User Information Box (Crucial for multi-user apps) -->
+        <div id="user-info" class="text-sm text-center mb-4 p-2 bg-indigo-100 border border-indigo-200 rounded-lg text-indigo-800 hidden">
+            <!-- User ID will be injected here -->
         </div>
-    
-        <div class="flex flex-wrap justify-center space-x-2 mt-4 mb-4">
-            <button onclick="newGame()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-150 shadow-md">New Game</button>
-            <button onclick="flipBoard()" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-150 shadow-md">Flip Board</button>
-            <button onclick="undoMove()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition duration-150 shadow-md">Undo</button>
+
+        <!-- Chess Board Container -->
+        <div id="board-container" class="board-container mx-auto">
+            <div id="board" style="width: 100%"></div>
         </div>
-    
-        <div class="text-center mb-3">
-            <label for="model" class="text-sm block mb-1 text-gray-400">Gemini Model:</label>
-            <input id="model" type="text" value="gemini-1.5-flash" class="w-full max-w-xs text-center px-3 py-1 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"/>
+
+        <!-- Game Status and Controls -->
+        <div class="mt-6">
+            <div id="status-box" class="p-4 mb-4 rounded-lg border-2 border-gray-200 text-center text-gray-700 bg-gray-50">
+                <span id="status">Make your move. You are playing White.</span>
+                <div id="loading-indicator" class="mt-2 text-indigo-600 hidden">
+                    <svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Thinking...
+                </div>
+            </div>
+
+            <div class="flex justify-center space-x-4">
+                <button id="reset-btn" class="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition duration-150 transform hover:scale-105">
+                    Reset Game
+                </button>
+                <button id="undo-btn" class="px-6 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 transition duration-150 transform hover:scale-105">
+                    Undo Last Move
+                </button>
+            </div>
+            
+            <p id="fen-display" class="mt-4 text-xs text-gray-500 text-center truncate">
+                FEN: r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 1 3
+            </p>
         </div>
-    
-        <!-- Updated, prominent warning for the PROXY_URL configuration -->
-        <div id="proxy-warning" class="mt-4 p-3 bg-red-800 text-red-100 rounded-lg shadow-xl border border-red-600">
-            <h3 class="font-bold text-lg mb-1">Configuration Error Likely!</h3>
-            <p class="text-sm">The persistent "Failed to fetch" error means the proxy URL is incorrect or inaccessible.</p>
-            <p class="text-sm mt-1"><strong>Action Required:</strong> Please scroll down to the <code>&lt;script&gt;</code> block and update the <code>PROXY_URL</code> variable to point to your *actual*, deployed Vercel function (or another working endpoint).</p>
-            <div class="mt-2 text-xs opacity-75">Current Placeholder URL: <span id="proxy-display" class="font-mono underline">...</span></div>
-        </div>
-    
-        <div id="log"></div>
     </div>
 
-<script>
-// IMPORTANT: You MUST update this URL to the *correct* API endpoint of your deployed Vercel proxy.
-// Replace 'https://komu-labs.vercel.app/api/gemini-move' with your own working URL.
-const PROXY_URL = 'https://komu-labs.vercel.app/api/gemini-move'; 
+    <!-- Load Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- Firebase/Canvas Global Variables ---
+        // Ensure these variables are available (provided by the Canvas environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-gemini-chess';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-// Update the display for user information
-document.getElementById('proxy-display').textContent = PROXY_URL;
+        let db, auth, userId = null;
+        let isAuthReady = false;
 
-const game = new Chess();
-let boardElement = document.getElementById('board');
-let humanColor = 'white';
-let historySAN = [];
-let dragging = null; // Stores the source square of the piece currently being dragged
-
-const pieceMap = {
-    'wK': '♔', 'wQ': '♕', 'wR': '♖', 'wB': '♗', 'wN': '♘', 'wP': '♙',
-    'bK': '♚', 'bQ': '♛', 'bR': '♜', 'bB': '♝', 'bN': '♞', 'bP': '♟',
-};
-
-// --- Game Logic Functions ---
-
-function log(msg, isUser = false) {
-    const logEl = document.getElementById('log');
-    const color = isUser ? 'text-green-400' : 'text-gray-300';
-    const prefix = isUser ? 'You' : 'Gemini';
-    logEl.innerHTML += `<div class="log-message ${color}">${prefix}: ${msg}</div>`;
-    logEl.scrollTop = logEl.scrollHeight;
-}
-
-function newGame() {
-    game.reset();
-    historySAN = [];
-    renderBoard();
-    log("New game started. You are playing as " + humanColor + ".", true);
-    if (humanColor === 'black') requestAIMove();
-}
-
-function flipBoard() {
-    humanColor = humanColor === 'white' ? 'black' : 'white';
-    log("Flipped board. You are now playing as " + humanColor + ".", true);
-    newGame();
-}
-
-function undoMove() {
-    const m1 = game.undo(); if (m1) historySAN.pop();
-    const m2 = game.undo(); if (m2) historySAN.pop();
-    renderBoard();
-    log("Undid last pair of moves.", true);
-}
-
-// --- Board Rendering and Interaction Functions (Custom) ---
-
-function getSquareName(rank, file) {
-    return String.fromCharCode(97 + file) + (rank + 1);
-}
-
-function renderBoard() {
-    const boardArray = game.board();
-    boardElement.innerHTML = ''; // Clear existing board
-    const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
-    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-    
-    // Determine rank/file order based on orientation
-    const rankOrder = humanColor === 'white' ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
-    const fileOrder = humanColor === 'white' ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
-
-    for (let rIndex of rankOrder) {
-        for (let fIndex of fileOrder) {
-            const squareName = getSquareName(rIndex, fIndex);
-            const piece = boardArray[7 - rIndex][fIndex]; // chess.js array is 0-7, top-down
-            const isLight = (rIndex + fIndex) % 2 === 0;
+        if (firebaseConfig) {
+            // Set debug logging for Firestore
+            setLogLevel('Debug');
             
-            const squareDiv = document.createElement('div');
-            squareDiv.className = `square ${isLight ? 'light-square' : 'dark-square'}`;
-            squareDiv.dataset.square = squareName;
-            
-            // Add piece if present
-            if (piece) {
-                const pieceKey = piece.color + piece.type.toUpperCase();
-                const pieceDiv = document.createElement('div');
-                pieceDiv.className = `piece ${piece.color}`;
-                pieceDiv.innerHTML = pieceMap[pieceKey];
-                
-                // Add draggable attribute only for the human player's pieces
-                const pieceColor = piece.color === 'w' ? 'white' : 'black';
-                if (pieceColor === humanColor) {
-                    pieceDiv.draggable = true;
-                    pieceDiv.addEventListener('dragstart', handleDragStart);
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // 1. Authentication Setup
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('user-info').textContent = `User ID: ${userId} (Share this ID to play with others)`;
+                    document.getElementById('user-info').classList.remove('hidden');
+                    console.log("Firebase Auth Ready. User ID:", userId);
+                    isAuthReady = true;
+
+                    // Load the game state after successful authentication
+                    await loadGameState(userId);
                 } else {
-                    pieceDiv.draggable = false;
+                    // Sign in anonymously if no token is provided, or use the token
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Firebase Sign In failed:", error);
+                        // Fallback to anonymous ID if sign-in fails completely
+                        userId = crypto.randomUUID();
+                        isAuthReady = true;
+                        document.getElementById('user-info').textContent = `User ID: ${userId} (Anonymous Mode)`;
+                        document.getElementById('user-info').classList.remove('hidden');
+                        await loadGameState(userId);
+                    }
                 }
-                
-                squareDiv.appendChild(pieceDiv);
-            }
+            });
+        } else {
+            console.error("Firebase configuration is missing.");
+            // Proceed without Firebase if config is missing (will not save state)
+            userId = crypto.randomUUID();
+            isAuthReady = true;
+        }
 
-            // Add drop listeners to all squares
-            squareDiv.addEventListener('dragover', handleDragOver);
-            squareDiv.addEventListener('drop', handleDrop);
+        // --- Game and UI setup ---
+        // Load external libraries (required globally)
+        const scriptChess = document.createElement('script');
+        scriptChess.src = "https://unpkg.com/chess.js@1.0.0-beta.7/dist/chess.js";
+        document.head.appendChild(scriptChess);
+        
+        const scriptBoard = document.createElement('script');
+        scriptBoard.src = "https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js";
+        document.head.appendChild(scriptBoard);
+
+        // Wait for both scripts to load before initializing the game
+        let scriptsLoaded = 0;
+        const initGame = () => {
+            scriptsLoaded++;
+            if (scriptsLoaded === 2) {
+                // Initialize game only after scripts are loaded AND auth is ready (handled in onAuthStateChanged)
+                if (isAuthReady) {
+                    window.game = new Chess();
+                    window.board = ChessBoard('board', {
+                        draggable: true,
+                        position: 'start',
+                        onDrop: onDrop,
+                        onSnapEnd: onSnapEnd
+                    });
+                    updateStatus();
+                    setupEventListeners();
+                }
+            }
+        };
+        scriptChess.onload = initGame;
+        scriptBoard.onload = initGame;
+
+        // --- CONSTANTS AND HELPERS ---
+        // !!! IMPORTANT: CHANGE THIS URL TO YOUR DEPLOYED VERCEL FUNCTION URL !!!
+        const PROXY_URL = 'https://komu-labs.vercel.app/api/gemini-move'; 
+        const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const API_KEY = ""; // Not used here, key is on the backend proxy server
+
+        const STATUS_ELEM = document.getElementById('status');
+        const FEN_ELEM = document.getElementById('fen-display');
+        const LOADING_ELEM = document.getElementById('loading-indicator');
+        
+        const MAX_RETRIES = 5;
+
+        // --- FIREBASE FUNCTIONS ---
+        const getGameStateDocRef = (uid) => {
+            if (!db || !uid) return null;
+            // Private data storage path: /artifacts/{appId}/users/{userId}/game_state/{docId}
+            return doc(db, 'artifacts', appId, 'users', uid, 'game_state', 'current');
+        };
+
+        const saveGameState = async (fen) => {
+            if (!isAuthReady || !userId) {
+                console.warn("Authentication not ready. Cannot save state.");
+                return;
+            }
+            const docRef = getGameStateDocRef(userId);
+            if (!docRef) return;
+
+            try {
+                await setDoc(docRef, { fen: fen, timestamp: new Date() }, { merge: true });
+                console.log("Game state saved successfully:", fen);
+            } catch (e) {
+                console.error("Error saving game state:", e);
+            }
+        };
+
+        const loadGameState = async (uid) => {
+            if (!isAuthReady || !uid || !window.game || !window.board) {
+                // Wait for all components to initialize
+                return;
+            }
             
-            boardElement.appendChild(squareDiv);
-        }
-    }
-}
-
-function highlightValidMoves(squareName) {
-    // Clear previous highlights
-    document.querySelectorAll('.square').forEach(s => s.classList.remove('highlight'));
-
-    const moves = game.moves({ square: squareName, verbose: true });
-    
-    if (moves.length === 0) return;
-
-    moves.forEach(move => {
-        const targetSquare = document.querySelector(`[data-square="${move.to}"]`);
-        if (targetSquare) {
-            targetSquare.classList.add('highlight');
-        }
-    });
-}
-
-function handleDragStart(event) {
-    const squareDiv = event.target.closest('.square');
-    if (!squareDiv) return;
-    
-    dragging = squareDiv.dataset.square;
-    event.dataTransfer.setData('text/plain', dragging);
-    highlightValidMoves(dragging);
-}
-
-function handleDragOver(event) {
-    event.preventDefault(); // Required to allow dropping
-}
-
-function handleDrop(event) {
-    event.preventDefault();
-    document.querySelectorAll('.square').forEach(s => s.classList.remove('highlight')); // Clear highlights
-
-    const source = dragging;
-    const target = event.currentTarget.dataset.square;
-    
-    if (!source || !target) return;
-    
-    const isHumanTurn = (game.turn() === 'w' && humanColor === 'white') || (game.turn() === 'b' && humanColor === 'black');
-    if (!isHumanTurn) return;
-
-    // Check for promotion (simple, always promote to queen for now)
-    let promotion = undefined;
-    const piece = game.get(source);
-    if (piece && piece.type === 'p' && (target[1] === '8' || target[1] === '1')) {
-        promotion = 'q';
-    }
-
-    const move = game.move({ from: source, to: target, promotion: promotion });
-    
-    if (move) {
-        historySAN.push(move.san);
-        log(move.san, true);
-        renderBoard();
-        
-        // Using game.game_over() for compatibility with chess.js v0.10.3
-        if (game.game_over()) { 
-            log("--- GAME OVER ---");
-        } else {
-            requestAIMove();
-        }
-    } else {
-        // If the move is illegal, re-render to snap back visually
-        renderBoard(); 
-    }
-    
-    dragging = null;
-}
-
-// Helper function with exponential backoff for API calls
-async function fetchWithRetry(url, options, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            // If response is received (even an error status like 404/500), we return it for status checking
-            return response; 
-        } catch (error) {
-            // Only catches network errors (e.g., DNS failure, connection refused)
-            if (i === retries - 1) {
-                // If this is the last attempt, re-throw the network error
-                throw new Error(`Failed to fetch from proxy after ${retries} attempts. Check proxy URL and deployment status. Underlying error: ${error.message}`);
+            const docRef = getGameStateDocRef(uid);
+            if (!docRef) {
+                window.board.start();
+                return;
             }
-            // Exponential backoff delay (1s, 2s, 4s, ...)
-            const delay = Math.pow(2, i) * 1000;
-            console.warn(`Attempt ${i + 1} failed. Retrying in ${delay / 1000}s...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
-    }
-}
 
-// --- API Call Functions ---
-
-async function requestAIMove() {
-    log("Gemini thinking...", false);
-    
-    const model = document.getElementById('model').value.trim();
-    
-    // Prevent further moves while AI is thinking
-    boardElement.classList.add('pointer-events-none'); 
-
-    const prompt = `
-You are a chess engine assistant. Respond ONLY with one JSON object:
-{"move":"e2e4","reason":"...","confidence":0.7}
-Rules:
-- "move" must be a legal UCI move (e.g., e2e4 or a7a8q) for the provided FEN.
-- Use lowercase.
-Input:
-- FEN: ${game.fen()}
-- Side to move: ${game.turn()==='w'?'white':'black'}
-- History (SAN): ${historySAN.join(', ') || '(none)'}
-`;
-
-    try {
-        // Use the fetchWithRetry function
-        const res = await fetchWithRetry(PROXY_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                prompt: prompt,
-                model: model
-            })
-        });
-
-        boardElement.classList.remove('pointer-events-none');
-
-        // Check for HTTP status errors (like 404, 500)
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({ error: 'Could not parse error response from proxy.' }));
-            throw new Error(`Proxy status error (${res.status}): ${errorData.error || 'Unknown error'}`);
-        }
-
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const match = text.match(/\{[\s\S]*\}/);
-
-        if (!match) {
-            throw new Error("Gemini response was invalid (No JSON found)");
-        }
-
-        const json = JSON.parse(match[0]);
-        const uci = json.move.toLowerCase();
-        
-        // Attempt to parse the UCI move (e.g., 'e7e8q')
-        const move = game.move({ 
-            from: uci.slice(0,2), 
-            to: uci.slice(2,4), 
-            promotion: uci.slice(4,5) // promotion is optional
-        });
-
-        if (move) {
-            historySAN.push(move.san);
-            log(move.san + (json.reason ? ` (Reason: ${json.reason})` : ''), false);
-            renderBoard(); // Update the UI
-            if (game.game_over()) {
-                log("--- GAME OVER ---");
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const savedFen = docSnap.data().fen;
+                    window.game.load(savedFen);
+                    window.board.position(savedFen);
+                    updateStatus();
+                    console.log("Game state loaded successfully:", savedFen);
+                } else {
+                    window.board.start(); // Start new game if no save found
+                    console.log("No saved game state found. Starting new game.");
+                }
+            } catch (e) {
+                console.error("Error loading game state:", e);
+                window.board.start(); // Start new game on error
             }
-        } else {
-            log(`Gemini gave illegal move: ${uci}. FEN: ${game.fen()}`, false);
-            console.error("Illegal move detected:", uci, "FEN:", game.fen());
-        }
-    } catch (err) {
-        boardElement.classList.remove('pointer-events-none');
-        log("Error: " + err.message, false);
-        console.error("Fetch or processing error:", err);
-        console.error("Critical: If the error persists, please verify the PROXY_URL is correct and the Vercel function is deployed and accessible.");
-    }
-}
+        };
 
-// Start the application when the entire document structure is ready
-document.addEventListener('DOMContentLoaded', () => {
-    newGame(); 
-});
-</script>
+        // --- CHESS LOGIC ---
+        function updateStatus() {
+            let status = '';
+            const moveColor = (window.game.turn() === 'w') ? 'White (You)' : 'Black (Gemini)';
+
+            if (window.game.isCheckmate()) {
+                status = 'Game over, ' + moveColor + ' is in checkmate.';
+            } else if (window.game.isDraw()) {
+                status = 'Game over, drawn position.';
+            } else {
+                status = moveColor + ' to move.';
+                if (window.game.isCheck()) {
+                    status += ' ' + moveColor + ' is in check.';
+                }
+            }
+
+            STATUS_ELEM.innerHTML = status;
+            FEN_ELEM.textContent = 'FEN: ' + window.game.fen();
+        }
+
+        function onDrop(source, target) {
+            // Check if the move is legal
+            const move = window.game.move({
+                from: source,
+                to: target,
+                promotion: 'q' // always promote to queen for simplicity
+            });
+
+            // Illegal move
+            if (move === null) return 'snapback';
+            
+            updateStatus();
+            saveGameState(window.game.fen());
+
+            // If it's Black's turn after the move, request Gemini move
+            if (window.game.turn() === 'b' && !window.game.isGameOver()) {
+                window.setTimeout(makeGeminiMove, 250);
+            }
+        }
+
+        // --- AI LOGIC ---
+
+        // Function to handle exponential backoff for retries
+        const fetchWithRetry = async (url, options, retries = 0) => {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response;
+            } catch (error) {
+                if (retries < MAX_RETRIES) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    console.warn(`Fetch failed. Retrying in ${Math.round(delay / 1000)}s... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithRetry(url, options, retries + 1);
+                }
+                throw new Error(`Fetch failed after ${MAX_RETRIES} attempts: ${error.message}`);
+            }
+        };
+
+        async function makeGeminiMove() {
+            LOADING_ELEM.classList.remove('hidden');
+            STATUS_ELEM.querySelector('span').textContent = "Black (Gemini) is thinking...";
+            
+            const fen = window.game.fen();
+
+            const body = {
+                fen: fen,
+                model: GEMINI_MODEL,
+                apiKey: API_KEY, // Sent for verification, but not used for API call on frontend
+            };
+
+            const options = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            };
+
+            try {
+                const response = await fetchWithRetry(PROXY_URL, options);
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const geminiMove = data.move;
+                
+                // Apply the move
+                const result = window.game.move(geminiMove, { sloppy: true });
+
+                if (result) {
+                    window.board.position(window.game.fen());
+                    saveGameState(window.game.fen());
+                } else {
+                    console.error("Gemini returned an illegal move:", geminiMove);
+                    // Handle illegal move by just updating the status, opponent gets another turn
+                }
+
+            } catch (error) {
+                console.error("Error making Gemini move:", error);
+                // Display error to the user
+                STATUS_ELEM.querySelector('span').textContent = `Error: ${error.message}. Try undoing and making a different move.`;
+            } finally {
+                LOADING_ELEM.classList.add('hidden');
+                updateStatus();
+            }
+        }
+
+
+        // update the board position after a piece snap for castling, en passant, etc.
+        function onSnapEnd() {
+            window.board.position(window.game.fen());
+        }
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                window.game.reset();
+                window.board.start();
+                updateStatus();
+                saveGameState(window.game.fen());
+                STATUS_ELEM.querySelector('span').textContent = 'Game reset. White to move.';
+            });
+
+            document.getElementById('undo-btn').addEventListener('click', () => {
+                window.game.undo(); // Undo AI move
+                window.game.undo(); // Undo Player move
+                window.board.position(window.game.fen());
+                updateStatus();
+                saveGameState(window.game.fen());
+            });
+        }
+    </script>
 </body>
 </html>
