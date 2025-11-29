@@ -1,200 +1,380 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Chess vs Gemini</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess vs Gemini</title>
+    <!-- Load Tailwind CSS for simple styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- We keep chess.js for the game logic -->
+    <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
+    
+    <style>
+        /* Custom styles for aesthetics */
+        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; }
+        .board-container { 
+            width: 90vw; 
+            max-width: 400px; 
+            margin: 20px auto; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
 
-  <!-- Chessboard.js UI -->
-  <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/css/chessboard.css" />
-  <script src="https://unpkg.com/chessboardjs@1.0.0/js/chessboard.js"></script>
+        /* --- Custom Board Styles (Replaces chessboard.js CSS) --- */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            aspect-ratio: 1 / 1; /* Keep it square */
+        }
 
-  <!-- Chess.js rules engine -->
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"></script>
+        .square {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5em; /* Size of the chess pieces (emojis) */
+            cursor: pointer;
+            position: relative;
+        }
 
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #111;
-      color: #eee;
-      text-align: center;
-      padding: 20px;
-    }
-    #board {
-      width: 400px;
-      margin: 20px auto;
-    }
-    #log {
-      width: 400px;
-      height: 200px;
-      overflow: auto;
-      background: #222;
-      padding: 10px;
-      margin: 0 auto;
-      border-radius: 6px;
-      text-align: left;
-      font-size: 14px;
-    }
-    input, button {
-      margin: 6px;
-      padding: 8px;
-      border-radius: 6px;
-      border: none;
-    }
-    input {
-      width: 300px;
-    }
-    button {
-      background: #444;
-      color: #fff;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #666;
-    }
-    #api-info {
-      margin-top: 10px;
-      font-size: 0.8em;
-      color: #aaa;
-    }
-  </style>
+        .light-square { background-color: #f0d9b5; }
+        .dark-square { background-color: #b58863; }
+        .light-square .piece { color: #000; }
+        .dark-square .piece { color: #000; }
+        
+        .light-square.highlight, .dark-square.highlight {
+            box-shadow: inset 0 0 0 4px #10b981; /* Tailwind green-500 */
+        }
+        
+        .piece {
+            user-select: none;
+            cursor: grab;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Adjust piece color for visibility */
+        .piece.w { color: #fff; text-shadow: 1px 1px 2px #000; }
+        .piece.b { color: #000; text-shadow: 1px 1px 2px #fff; }
+
+        /* --- End Custom Board Styles --- */
+        
+        #log { width: 90vw; max-width: 400px; height: 180px; overflow-y: auto; background: #1e293b; padding: 12px; margin: 15px auto; border-radius: 6px; text-align: left; font-size: 14px; border: 1px solid #334155; }
+        .log-message { margin-bottom: 4px; border-bottom: 1px dotted #334155; padding-bottom: 2px; }
+    </style>
 </head>
+<body class="p-4 flex flex-col items-center justify-center min-h-screen">
+    <div class="w-full max-w-lg">
+        <h2 class="text-3xl font-bold mb-6 text-white">Chess vs Gemini</h2>
+        
+        <div id="board" class="board-container">
+            <!-- Squares will be generated here by JavaScript -->
+        </div>
+    
+        <div class="flex flex-wrap justify-center space-x-2 mt-4 mb-4">
+            <button onclick="newGame()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition duration-150 shadow-md">New Game</button>
+            <button onclick="flipBoard()" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-150 shadow-md">Flip Board</button>
+            <button onclick="undoMove()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition duration-150 shadow-md">Undo</button>
+        </div>
+    
+        <div class="text-center mb-3">
+            <label for="model" class="text-sm block mb-1 text-gray-400">Gemini Model:</label>
+            <input id="model" type="text" value="gemini-1.5-flash" class="w-full max-w-xs text-center px-3 py-1 bg-gray-700 text-white border border-gray-600 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"/>
+        </div>
+    
+        <!-- Updated, prominent warning for the PROXY_URL configuration -->
+        <div id="proxy-warning" class="mt-4 p-3 bg-red-800 text-red-100 rounded-lg shadow-xl border border-red-600">
+            <h3 class="font-bold text-lg mb-1">Configuration Error Likely!</h3>
+            <p class="text-sm">The persistent "Failed to fetch" error means the proxy URL is incorrect or inaccessible.</p>
+            <p class="text-sm mt-1"><strong>Action Required:</strong> Please scroll down to the <code>&lt;script&gt;</code> block and update the <code>PROXY_URL</code> variable to point to your *actual*, deployed Vercel function (or another working endpoint).</p>
+            <div class="mt-2 text-xs opacity-75">Current Placeholder URL: <span id="proxy-display" class="font-mono underline">...</span></div>
+        </div>
+    
+        <div id="log"></div>
+    </div>
 
-<body>
-  <h2>Chess vs Gemini</h2>
-  <div id="board"></div>
+<script>
+// IMPORTANT: You MUST update this URL to the *correct* API endpoint of your deployed Vercel proxy.
+// Replace 'https://komu-labs.vercel.app/api/gemini-move' with your own working URL.
+const PROXY_URL = 'https://komu-labs.vercel.app/api/gemini-move'; 
 
-  <div>
-    <button onclick="newGame()">New Game</button>
-    <button onclick="flipBoard()">Flip</button>
-    <button onclick="undoMove()">Undo</button>
-  </div>
+// Update the display for user information
+document.getElementById('proxy-display').textContent = PROXY_URL;
 
-  <div>
-    <input id="model" type="text" value="gemini-1.5-flash" />
-  </div>
+const game = new Chess();
+let boardElement = document.getElementById('board');
+let humanColor = 'white';
+let historySAN = [];
+let dragging = null; // Stores the source square of the piece currently being dragged
 
-  <div id="api-info">
-    *API key is now managed securely on the backend proxy server at <strong>http://localhost:3000</strong>
-  </div>
+const pieceMap = {
+    'wK': '♔', 'wQ': '♕', 'wR': '♖', 'wB': '♗', 'wN': '♘', 'wP': '♙',
+    'bK': '♚', 'bQ': '♛', 'bR': '♜', 'bB': '♝', 'bN': '♞', 'bP': '♟',
+};
 
-  <div id="log"></div>
+// --- Game Logic Functions ---
 
-  <script>
-    const game = new Chess();
-    let board = null;
-    let humanColor = 'white';
-    let historySAN = [];
-    const PROXY_URL = 'https://komu-labs.vercel.app/';
+function log(msg, isUser = false) {
+    const logEl = document.getElementById('log');
+    const color = isUser ? 'text-green-400' : 'text-gray-300';
+    const prefix = isUser ? 'You' : 'Gemini';
+    logEl.innerHTML += `<div class="log-message ${color}">${prefix}: ${msg}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+}
 
-    function log(msg) {
-      const logEl = document.getElementById('log');
-      logEl.innerHTML += msg + "<br>";
-      logEl.scrollTop = logEl.scrollHeight;
+function newGame() {
+    game.reset();
+    historySAN = [];
+    renderBoard();
+    log("New game started. You are playing as " + humanColor + ".", true);
+    if (humanColor === 'black') requestAIMove();
+}
+
+function flipBoard() {
+    humanColor = humanColor === 'white' ? 'black' : 'white';
+    log("Flipped board. You are now playing as " + humanColor + ".", true);
+    newGame();
+}
+
+function undoMove() {
+    const m1 = game.undo(); if (m1) historySAN.pop();
+    const m2 = game.undo(); if (m2) historySAN.pop();
+    renderBoard();
+    log("Undid last pair of moves.", true);
+}
+
+// --- Board Rendering and Interaction Functions (Custom) ---
+
+function getSquareName(rank, file) {
+    return String.fromCharCode(97 + file) + (rank + 1);
+}
+
+function renderBoard() {
+    const boardArray = game.board();
+    boardElement.innerHTML = ''; // Clear existing board
+    const ranks = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    
+    // Determine rank/file order based on orientation
+    const rankOrder = humanColor === 'white' ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+    const fileOrder = humanColor === 'white' ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+
+    for (let rIndex of rankOrder) {
+        for (let fIndex of fileOrder) {
+            const squareName = getSquareName(rIndex, fIndex);
+            const piece = boardArray[7 - rIndex][fIndex]; // chess.js array is 0-7, top-down
+            const isLight = (rIndex + fIndex) % 2 === 0;
+            
+            const squareDiv = document.createElement('div');
+            squareDiv.className = `square ${isLight ? 'light-square' : 'dark-square'}`;
+            squareDiv.dataset.square = squareName;
+            
+            // Add piece if present
+            if (piece) {
+                const pieceKey = piece.color + piece.type.toUpperCase();
+                const pieceDiv = document.createElement('div');
+                pieceDiv.className = `piece ${piece.color}`;
+                pieceDiv.innerHTML = pieceMap[pieceKey];
+                
+                // Add draggable attribute only for the human player's pieces
+                const pieceColor = piece.color === 'w' ? 'white' : 'black';
+                if (pieceColor === humanColor) {
+                    pieceDiv.draggable = true;
+                    pieceDiv.addEventListener('dragstart', handleDragStart);
+                } else {
+                    pieceDiv.draggable = false;
+                }
+                
+                squareDiv.appendChild(pieceDiv);
+            }
+
+            // Add drop listeners to all squares
+            squareDiv.addEventListener('dragover', handleDragOver);
+            squareDiv.addEventListener('drop', handleDrop);
+            
+            boardElement.appendChild(squareDiv);
+        }
     }
+}
 
-    function updateBoard() {
-      board.position(game.fen());
-    }
+function highlightValidMoves(squareName) {
+    // Clear previous highlights
+    document.querySelectorAll('.square').forEach(s => s.classList.remove('highlight'));
 
-    function newGame() {
-      game.reset();
-      historySAN = [];
-      updateBoard();
-      log("New game started.");
-      if (humanColor === 'black') requestAIMove();
-    }
+    const moves = game.moves({ square: squareName, verbose: true });
+    
+    if (moves.length === 0) return;
 
-    function flipBoard() {
-      board.flip();
-      humanColor = humanColor === 'white' ? 'black' : 'white';
-      log("You are now playing as " + humanColor + ".");
-      newGame();
-    }
-
-    function undoMove() {
-      const m1 = game.undo(); if (m1) historySAN.pop();
-      const m2 = game.undo(); if (m2) historySAN.pop();
-      updateBoard();
-      log("Undid last pair of moves.");
-    }
-
-    function onDrop(source, target) {
-      const isHumanTurn = (game.turn() === 'w' && humanColor === 'white') || (game.turn() === 'b' && humanColor === 'black');
-      if (!isHumanTurn) return 'snapback';
-
-      const move = game.move({ from: source, to: target, promotion: 'q' });
-      if (!move) return 'snapback';
-
-      historySAN.push(move.san);
-      log("You: " + move.san);
-      updateBoard();
-      if (!game.isGameOver()) requestAIMove();
-    }
-
-    board = Chessboard('board', {
-      position: 'start',
-      draggable: true,
-      onDrop: onDrop
+    moves.forEach(move => {
+        const targetSquare = document.querySelector(`[data-square="${move.to}"]`);
+        if (targetSquare) {
+            targetSquare.classList.add('highlight');
+        }
     });
+}
 
-    board.orientation(humanColor);
+function handleDragStart(event) {
+    const squareDiv = event.target.closest('.square');
+    if (!squareDiv) return;
+    
+    dragging = squareDiv.dataset.square;
+    event.dataTransfer.setData('text/plain', dragging);
+    highlightValidMoves(dragging);
+}
 
-    function requestAIMove() {
-      log("Gemini thinking...");
-      const model = document.getElementById('model').value.trim();
+function handleDragOver(event) {
+    event.preventDefault(); // Required to allow dropping
+}
 
-      const prompt = `
+function handleDrop(event) {
+    event.preventDefault();
+    document.querySelectorAll('.square').forEach(s => s.classList.remove('highlight')); // Clear highlights
+
+    const source = dragging;
+    const target = event.currentTarget.dataset.square;
+    
+    if (!source || !target) return;
+    
+    const isHumanTurn = (game.turn() === 'w' && humanColor === 'white') || (game.turn() === 'b' && humanColor === 'black');
+    if (!isHumanTurn) return;
+
+    // Check for promotion (simple, always promote to queen for now)
+    let promotion = undefined;
+    const piece = game.get(source);
+    if (piece && piece.type === 'p' && (target[1] === '8' || target[1] === '1')) {
+        promotion = 'q';
+    }
+
+    const move = game.move({ from: source, to: target, promotion: promotion });
+    
+    if (move) {
+        historySAN.push(move.san);
+        log(move.san, true);
+        renderBoard();
+        
+        // Using game.game_over() for compatibility with chess.js v0.10.3
+        if (game.game_over()) { 
+            log("--- GAME OVER ---");
+        } else {
+            requestAIMove();
+        }
+    } else {
+        // If the move is illegal, re-render to snap back visually
+        renderBoard(); 
+    }
+    
+    dragging = null;
+}
+
+// Helper function with exponential backoff for API calls
+async function fetchWithRetry(url, options, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            // If response is received (even an error status like 404/500), we return it for status checking
+            return response; 
+        } catch (error) {
+            // Only catches network errors (e.g., DNS failure, connection refused)
+            if (i === retries - 1) {
+                // If this is the last attempt, re-throw the network error
+                throw new Error(`Failed to fetch from proxy after ${retries} attempts. Check proxy URL and deployment status. Underlying error: ${error.message}`);
+            }
+            // Exponential backoff delay (1s, 2s, 4s, ...)
+            const delay = Math.pow(2, i) * 1000;
+            console.warn(`Attempt ${i + 1} failed. Retrying in ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
+// --- API Call Functions ---
+
+async function requestAIMove() {
+    log("Gemini thinking...", false);
+    
+    const model = document.getElementById('model').value.trim();
+    
+    // Prevent further moves while AI is thinking
+    boardElement.classList.add('pointer-events-none'); 
+
+    const prompt = `
 You are a chess engine assistant. Respond ONLY with one JSON object:
 {"move":"e2e4","reason":"...","confidence":0.7}
 Rules:
-- "move" must be a legal UCI move for the provided FEN.
-- Use lowercase; include promotion like "a7a8q" if needed.
+- "move" must be a legal UCI move (e.g., e2e4 or a7a8q) for the provided FEN.
+- Use lowercase.
 Input:
 - FEN: ${game.fen()}
-- Side to move: ${game.turn() === 'w' ? 'white' : 'black'}
+- Side to move: ${game.turn()==='w'?'white':'black'}
 - History (SAN): ${historySAN.join(', ') || '(none)'}
 `;
 
-      fetch(PROXY_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt, model: model })
-      })
-      .then(res => {
-        if (!res.ok) throw new Error(`Proxy server error: HTTP status ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        if (data.error) throw new Error(`Proxy reported: ${data.error}`);
+    try {
+        // Use the fetchWithRetry function
+        const res = await fetchWithRetry(PROXY_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                prompt: prompt,
+                model: model
+            })
+        });
 
+        boardElement.classList.remove('pointer-events-none');
+
+        // Check for HTTP status errors (like 404, 500)
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: 'Could not parse error response from proxy.' }));
+            throw new Error(`Proxy status error (${res.status}): ${errorData.error || 'Unknown error'}`);
+        }
+
+        const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
         const match = text.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error("Gemini response was invalid (No JSON found)");
+
+        if (!match) {
+            throw new Error("Gemini response was invalid (No JSON found)");
+        }
 
         const json = JSON.parse(match[0]);
         const uci = json.move.toLowerCase();
-        const move = game.move({
-          from: uci.slice(0, 2),
-          to: uci.slice(2, 4),
-          promotion: uci.slice(4, 5)
+        
+        // Attempt to parse the UCI move (e.g., 'e7e8q')
+        const move = game.move({ 
+            from: uci.slice(0,2), 
+            to: uci.slice(2,4), 
+            promotion: uci.slice(4,5) // promotion is optional
         });
 
         if (move) {
-          historySAN.push(move.san);
-          log("Gemini: " + move.san + (json.reason ? ` (${json.reason})` : ''));
-          updateBoard();
-          if (game.isGameOver()) log("--- GAME OVER ---");
+            historySAN.push(move.san);
+            log(move.san + (json.reason ? ` (Reason: ${json.reason})` : ''), false);
+            renderBoard(); // Update the UI
+            if (game.game_over()) {
+                log("--- GAME OVER ---");
+            }
         } else {
-          log("Gemini gave illegal move: " + uci + " | FEN: " + game.fen());
+            log(`Gemini gave illegal move: ${uci}. FEN: ${game.fen()}`, false);
+            console.error("Illegal move detected:", uci, "FEN:", game.fen());
         }
-      })
-      .catch(err => {
-        log("Error contacting proxy/Gemini: " + err.message);
-        console.error(err);
-      });
+    } catch (err) {
+        boardElement.classList.remove('pointer-events-none');
+        log("Error: " + err.message, false);
+        console.error("Fetch or processing error:", err);
+        console.error("Critical: If the error persists, please verify the PROXY_URL is correct and the Vercel function is deployed and accessible.");
     }
+}
 
-    updateBoard();
-  </script>
+// Start the application when the entire document structure is ready
+document.addEventListener('DOMContentLoaded', () => {
+    newGame(); 
+});
+</script>
 </body>
 </html>
